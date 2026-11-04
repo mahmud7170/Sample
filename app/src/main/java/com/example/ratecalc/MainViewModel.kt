@@ -32,7 +32,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch {
-            if (profileDao.count() == 0) profileDao.insert(Profile(name = "Default Profile"))
+            if (profileDao.count() == 0) profileDao.insert(Profile(name = formatDate(System.currentTimeMillis())))
             currentId.value = profileDao.latest()?.id
         }
     }
@@ -76,7 +76,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun createProfile(name: String) {
         viewModelScope.launch {
-            val id = profileDao.insert(Profile(name = name))
+            val id = profileDao.insert(Profile(name = name.ifBlank { formatDate(System.currentTimeMillis()) }))
             currentId.value = id
         }
     }
@@ -87,7 +87,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             profileDao.delete(id) // products cascade
             if (currentId.value == id) {
-                if (profileDao.count() == 0) currentId.value = profileDao.insert(Profile(name = "Default Profile"))
+                if (profileDao.count() == 0) currentId.value = profileDao.insert(Profile(name = formatDate(System.currentTimeMillis())))
                 else currentId.value = profileDao.latest()?.id
             }
         }
@@ -103,7 +103,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     profileName = name,
                     createdAt = now,
                     total = items.sumOf { Calc.lineTotal(it) },
-                    body = Calc.invoiceText(name, items, now)
+                    body = Calc.invoiceText(items)
                 )
             )
             say("Saved to history")

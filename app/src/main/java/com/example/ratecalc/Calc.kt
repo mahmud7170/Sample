@@ -5,53 +5,47 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * ALL CALCULATION RULES LIVE HERE. If your original app used different formulas, change only this file.
- *
- * Assumptions:
- *  - `rate`  = price of ONE tablet (৳).
- *  - `cc`    = tablets in one CC pack.   `pot` = tablets in one Pot.
- *  - `soldUnit` decides what one "quantity" means:
- *        Normal -> 1 tablet,  CC -> `cc` tablets,  Pot -> `pot` tablets.
- *  - Line total = rate * tablets per unit * quantity.
+ * ALL CALCULATION RULES LIVE HERE (matched to the original app's screenshots).
+ *  - Total      = rate * quantity            (always)
+ *  - CC count   = quantity / tablets-per-CC  (if the product is "sold as CC", quantity already is CC)
+ *  - Pot count  = quantity / tablets-per-Pot (if "sold as Pot", quantity already is Pot)
  */
 object Calc {
     val units = listOf("Normal", "CC", "Pot")
 
-    fun tabletsPerUnit(p: Product): Double = when (p.soldUnit) {
-        "CC" -> p.cc
-        "Pot" -> p.pot
-        else -> 1.0
+    fun lineTotal(p: Product): Double = p.rate * p.quantity
+
+    fun ccCount(p: Product): Double = when {
+        p.soldUnit == "CC" -> p.quantity.toDouble()
+        p.cc > 0 -> p.quantity / p.cc
+        else -> 0.0
     }
 
-    fun unitLabel(p: Product): String = when (p.soldUnit) {
-        "CC" -> "CC"
-        "Pot" -> "Pot"
-        else -> "tablet"
+    fun potCount(p: Product): Double = when {
+        p.soldUnit == "Pot" -> p.quantity.toDouble()
+        p.pot > 0 -> p.quantity / p.pot
+        else -> 0.0
     }
 
-    fun unitPrice(p: Product): Double = p.rate * tabletsPerUnit(p)
-    fun lineTotal(p: Product): Double = unitPrice(p) * p.quantity
-    fun tablets(p: Product): Double = tabletsPerUnit(p) * p.quantity
+    /** "20", "25 CC", "3 Pot" */
+    fun qtyLabel(p: Product): String = when (p.soldUnit) {
+        "CC" -> "${p.quantity} CC"
+        "Pot" -> "${p.quantity} Pot"
+        else -> "${p.quantity}"
+    }
 
-    // FIX: guarded against division by zero (cc/pot = 0 no longer gives Infinity/NaN).
-    fun ccCount(p: Product): Double = if (p.cc > 0) tablets(p) / p.cc else 0.0
-    fun potCount(p: Product): Double = if (p.pot > 0) tablets(p) / p.pot else 0.0
-
-    fun invoiceText(profile: String, items: List<Product>, time: Long): String {
-        val sb = StringBuilder()
-        sb.append("INVOICE - ").append(profile).append('\n')
-        sb.append(formatDate(time)).append("\n\n")
+    fun invoiceText(items: List<Product>): String {
+        val sb = StringBuilder("INVOICE\n\n")
         items.forEach { p ->
-            sb.append(p.name).append('\n')
-            sb.append("  ").append(p.quantity).append(" x ").append(money(unitPrice(p)))
-                .append(" (").append(unitLabel(p)).append(") = ").append(money(lineTotal(p))).append('\n')
+            sb.append(p.name).append("  ").append(money(p.rate)).append(" x ").append(qtyLabel(p))
+                .append(" = ").append(money(lineTotal(p))).append('\n')
         }
-        sb.append("\nTOTAL: ").append(money(items.sumOf { lineTotal(it) }))
+        sb.append("\nGrand Total: ").append(money(items.sumOf { lineTotal(it) }))
         return sb.toString()
     }
 }
 
-fun money(d: Double): String = "৳ " + String.format(Locale.US, "%,.2f", d)
+fun money(d: Double): String = "৳" + String.format(Locale.US, "%.2f", d)
 
 fun num(d: Double): String =
     if (d == d.toLong().toDouble()) d.toLong().toString() else String.format(Locale.US, "%.2f", d)

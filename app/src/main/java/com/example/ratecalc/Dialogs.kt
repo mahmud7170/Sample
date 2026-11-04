@@ -61,18 +61,18 @@ fun ProductDialog(
                 )
                 OutlinedTextField(
                     value = rate, onValueChange = { rate = it },
-                    label = { Text("Rate (৳) per tablet") }, singleLine = true,
+                    label = { Text("Rate (৳)") }, singleLine = true,
                     keyboardOptions = decimal, modifier = Modifier.fillMaxWidth()
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = cc, onValueChange = { cc = it },
-                        label = { Text("Tablets / CC") }, singleLine = true,
+                        label = { Text("Tablets per CC") }, singleLine = true,
                         keyboardOptions = decimal, modifier = Modifier.weight(1f)
                     )
                     OutlinedTextField(
                         value = pot, onValueChange = { pot = it },
-                        label = { Text("Tablets / Pot") }, singleLine = true,
+                        label = { Text("Tablets per Pot") }, singleLine = true,
                         keyboardOptions = decimal, modifier = Modifier.weight(1f)
                     )
                 }
@@ -109,7 +109,7 @@ fun ProductDialog(
 }
 
 @Composable
-fun QtyDialog(product: Product, onSet: (Int) -> Unit, onDismiss: () -> Unit) {
+fun QtyDialog(product: Product, onSet: (Int) -> Unit, onEdit: () -> Unit, onDismiss: () -> Unit) {
     var text by remember { mutableStateOf(product.quantity.toString()) }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -118,66 +118,33 @@ fun QtyDialog(product: Product, onSet: (Int) -> Unit, onDismiss: () -> Unit) {
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it.filter { c -> c.isDigit() }.take(6) },
-                label = { Text("Quantity (${Calc.unitLabel(product)})") },
+                label = { Text("Quantity" + if (product.soldUnit != "Normal") " (${product.soldUnit})" else "") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth()
             )
         },
         confirmButton = { TextButton(onClick = { onSet(text.toIntOrNull() ?: 0) }) { Text("Set") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = {
+            Row {
+                TextButton(onClick = onEdit) { Text("Edit product") }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        }
     )
 }
 
 @Composable
-fun InvoiceDialog(
-    profileName: String,
-    items: List<Product>,
-    onShare: (String) -> Unit,
-    onSave: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val now = remember { System.currentTimeMillis() }
-    val total = items.sumOf { Calc.lineTotal(it) }
+fun RenameDialog(initial: String, onSave: (String) -> Unit, onDismiss: () -> Unit) {
+    var text by remember { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Invoice") },
+        title = { Text("Rename") },
         text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text("$profileName · ${formatDate(now)}", style = MaterialTheme.typography.labelMedium)
-                HorizontalDivider()
-                if (items.isEmpty()) Text("No items selected yet.")
-                items.forEach { p ->
-                    Row(verticalAlignment = Alignment.Top) {
-                        Column(Modifier.weight(1f)) {
-                            Text(p.name, fontWeight = FontWeight.SemiBold)
-                            Text(
-                                "${p.quantity} × ${money(Calc.unitPrice(p))} / ${Calc.unitLabel(p)}",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        Text(money(Calc.lineTotal(p)))
-                    }
-                }
-                HorizontalDivider()
-                Row {
-                    Text("Total", Modifier.weight(1f), fontWeight = FontWeight.Bold)
-                    Text(money(total), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                }
-            }
+            OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true, modifier = Modifier.fillMaxWidth())
         },
-        confirmButton = {
-            TextButton(enabled = items.isNotEmpty(), onClick = { onShare(Calc.invoiceText(profileName, items, now)) }) { Text("Share") }
-        },
-        dismissButton = {
-            Row {
-                TextButton(enabled = items.isNotEmpty(), onClick = onSave) { Text("Save") }
-                TextButton(onClick = onDismiss) { Text("Close") }
-            }
-        }
+        confirmButton = { TextButton(enabled = text.isNotBlank(), onClick = { onSave(text.trim()) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
@@ -219,13 +186,13 @@ fun ProfilesDialog(
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = newName, onValueChange = { newName = it },
-                    label = { Text("New profile name") }, singleLine = true,
+                    label = { Text("New profile name (optional)") }, singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
         },
         confirmButton = {
-            TextButton(enabled = newName.isNotBlank(), onClick = { onCreate(newName.trim()); newName = ""; onDismiss() }) {
+            TextButton(onClick = { onCreate(newName.trim()); newName = ""; onDismiss() }) {
                 Text("Create")
             }
         },

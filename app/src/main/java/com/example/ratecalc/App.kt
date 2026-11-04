@@ -4,23 +4,31 @@ import android.content.Context
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -35,7 +43,9 @@ fun shareText(ctx: Context, text: String) {
     ctx.startActivity(Intent.createChooser(i, "Share"))
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun cardColors() = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+
 @Composable
 fun AppRoot(vm: MainViewModel) {
     val ctx = LocalContext.current
@@ -50,6 +60,7 @@ fun AppRoot(vm: MainViewModel) {
     var showMenu by remember { mutableStateOf(false) }
     var showInvoice by remember { mutableStateOf(false) }
     var showAdd by remember { mutableStateOf(false) }
+    var renameTitle by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Product?>(null) }
     var qtyFor by remember { mutableStateOf<Product?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
@@ -72,63 +83,77 @@ fun AppRoot(vm: MainViewModel) {
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = {
-                    Column(Modifier.clickable { showProfiles = true }) {
-                        Text(profile?.name ?: "Loading…", fontWeight = FontWeight.Bold, maxLines = 1)
-                        Text("Tap to switch profile", style = MaterialTheme.typography.labelSmall)
-                    }
-                },
-                actions = {
-                    Box {
-                        IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, "Menu") }
-                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                            DropdownMenuItem(text = { Text("Manage profiles") }, onClick = { showMenu = false; showProfiles = true })
-                            DropdownMenuItem(text = { Text("Import CSV") }, onClick = { showMenu = false; importLauncher.launch(arrayOf("*/*")) })
-                            DropdownMenuItem(text = { Text("Export CSV") }, onClick = {
-                                showMenu = false
-                                exportLauncher.launch("${profile?.name ?: "products"}.csv")
-                            })
-                        }
+            Row(
+                Modifier.fillMaxWidth().statusBarsPadding().padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    Modifier.size(48.dp).clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .clickable { showProfiles = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Person, "Profiles", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+                Spacer(Modifier.width(14.dp))
+                Text(
+                    profile?.name ?: "…",
+                    modifier = Modifier.weight(1f),
+                    fontSize = 24.sp, lineHeight = 30.sp, fontWeight = FontWeight.Bold, maxLines = 2
+                )
+                IconButton(onClick = { renameTitle = true }) { Icon(Icons.Default.Edit, "Rename") }
+                IconButton(onClick = { showInvoice = true }) { Icon(Icons.Default.Share, "Invoice") }
+                Box {
+                    IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, "Menu") }
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(text = { Text("Profiles") }, onClick = { showMenu = false; showProfiles = true })
+                        DropdownMenuItem(text = { Text("Import CSV") }, onClick = { showMenu = false; importLauncher.launch(arrayOf("*/*")) })
+                        DropdownMenuItem(text = { Text("Export CSV") }, onClick = {
+                            showMenu = false
+                            exportLauncher.launch("products.csv")
+                        })
                     }
                 }
-            )
+            }
         },
         bottomBar = {
-            NavigationBar {
-                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, icon = { Text("🧮") }, label = { Text("Calculate") })
-                NavigationBarItem(selected = tab == 1, onClick = { tab = 1 }, icon = { Text("📦") }, label = { Text("CC / Pot") })
-                NavigationBarItem(selected = tab == 2, onClick = { tab = 2 }, icon = { Text("🕘") }, label = { Text("History") })
+            Column {
+                TotalBar(
+                    total = grandTotal,
+                    showHistoryButton = tab == 0,
+                    clearLabel = if (tab == 0) "Clear All" else "Clear",
+                    canSave = selected.isNotEmpty(),
+                    onHistory = { vm.saveHistory(selected) },
+                    onClear = { confirmClear = true }
+                )
+                NavigationBar {
+                    NavigationBarItem(selected = tab == 0, onClick = { tab = 0 },
+                        icon = { Icon(Icons.Default.ShoppingCart, null) }, label = { Text("Calculate") })
+                    NavigationBarItem(selected = tab == 1, onClick = { tab = 1 },
+                        icon = { Icon(Icons.Default.Star, null) }, label = { Text("CC") })
+                    NavigationBarItem(selected = tab == 2, onClick = { tab = 2 },
+                        icon = { Icon(Icons.Default.Menu, null) }, label = { Text("History") })
+                }
             }
         },
         floatingActionButton = {
-            if (tab == 0) {
-                ExtendedFloatingActionButton(
+            if (tab != 2) {
+                FloatingActionButton(
                     onClick = { showAdd = true },
-                    icon = { Icon(Icons.Default.Add, null) },
-                    text = { Text("Add product") }
-                )
+                    shape = RoundedCornerShape(20.dp),
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                ) { Icon(Icons.Default.Add, "Add product") }
             }
         },
         snackbarHost = { SnackbarHost(snack) }
     ) { inner ->
         Box(Modifier.padding(inner).fillMaxSize()) {
             when (tab) {
-                0 -> CalculateTab(
-                    products = filtered,
-                    totalCount = products.size,
-                    grandTotal = grandTotal,
-                    selectedCount = selected.size,
-                    query = query,
-                    onQuery = { query = it },
-                    onQty = { p, q -> vm.setQty(p, q) },
-                    onEdit = { editing = it },
-                    onTapQty = { qtyFor = it },
-                    onInvoice = { showInvoice = true },
-                    onClear = { confirmClear = true }
-                )
-                1 -> StockTab(selected)
+                0 -> CalculateTab(filtered, products.isEmpty(), query, { query = it }, onTap = { qtyFor = it })
+                1 -> StockTab(selected, query, { query = it })
                 else -> HistoryTab(history, onShare = { shareText(ctx, it.body) }, onDelete = { vm.deleteHistory(it) })
             }
         }
@@ -143,6 +168,13 @@ fun AppRoot(vm: MainViewModel) {
             onRename = { id, n -> vm.renameProfile(id, n) },
             onDelete = { vm.deleteProfile(it) },
             onDismiss = { showProfiles = false }
+        )
+    }
+    if (renameTitle) {
+        RenameDialog(
+            initial = profile?.name ?: "",
+            onSave = { n -> profile?.let { vm.renameProfile(it.id, n) }; renameTitle = false },
+            onDismiss = { renameTitle = false }
         )
     }
     if (showAdd) {
@@ -162,20 +194,23 @@ fun AppRoot(vm: MainViewModel) {
         )
     }
     qtyFor?.let { p ->
-        QtyDialog(p, onSet = { vm.setQty(p, it); qtyFor = null }, onDismiss = { qtyFor = null })
+        QtyDialog(
+            product = p,
+            onSet = { vm.setQty(p, it); qtyFor = null },
+            onEdit = { qtyFor = null; editing = p },
+            onDismiss = { qtyFor = null }
+        )
     }
     if (showInvoice) {
-        InvoiceDialog(
-            profileName = profile?.name ?: "Profile",
+        InvoiceScreen(
             items = selected,
-            onShare = { shareText(ctx, it) },
-            onSave = { vm.saveHistory(selected); showInvoice = false },
-            onDismiss = { showInvoice = false }
+            onShare = { InvoiceImage.share(ctx, selected) },
+            onClose = { showInvoice = false }
         )
     }
     if (confirmClear) {
         ConfirmDialog(
-            title = "Clear quantities?",
+            title = "Clear all quantities?",
             text = "All quantities in this profile will be reset to 0.",
             confirmLabel = "Clear",
             onConfirm = { vm.clearQuantities(); confirmClear = false },
@@ -185,158 +220,119 @@ fun AppRoot(vm: MainViewModel) {
 }
 
 @Composable
-fun CalculateTab(
-    products: List<Product>,
-    totalCount: Int,
-    grandTotal: Double,
-    selectedCount: Int,
-    query: String,
-    onQuery: (String) -> Unit,
-    onQty: (Product, Int) -> Unit,
-    onEdit: (Product) -> Unit,
-    onTapQty: (Product) -> Unit,
-    onInvoice: () -> Unit,
+fun TotalBar(
+    total: Double,
+    showHistoryButton: Boolean,
+    clearLabel: String,
+    canSave: Boolean,
+    onHistory: () -> Unit,
     onClear: () -> Unit
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ElevatedCard(
+        shape = RoundedCornerShape(32.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 6.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(Modifier.padding(20.dp)) {
-                    Text("Grand total", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Text(
-                        money(grandTotal), fontSize = 34.sp, fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Text("$selectedCount of $totalCount items selected", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Spacer(Modifier.height(12.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = onInvoice, enabled = selectedCount > 0) {
-                            Icon(Icons.Default.Share, null, Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Invoice")
-                        }
-                        OutlinedButton(onClick = onClear, enabled = selectedCount > 0) { Text("Clear") }
+        Row(Modifier.padding(horizontal = 24.dp, vertical = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Grand Total", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Text(money(total), fontSize = 38.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                if (showHistoryButton) {
+                    Button(onClick = onHistory, enabled = canSave) {
+                        Text("History", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                     }
+                }
+                TextButton(onClick = onClear) {
+                    Text(clearLabel, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 }
             }
         }
-        item {
-            OutlinedTextField(
-                value = query, onValueChange = onQuery,
-                placeholder = { Text("Search products") },
-                leadingIcon = { Icon(Icons.Default.Search, null) },
-                trailingIcon = {
-                    if (query.isNotEmpty()) IconButton(onClick = { onQuery("") }) { Icon(Icons.Default.Close, "Clear search") }
-                },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
+    }
+}
+
+@Composable
+fun SearchField(query: String, onQuery: (String) -> Unit) {
+    OutlinedTextField(
+        value = query, onValueChange = onQuery,
+        placeholder = { Text("Search Products", fontSize = 18.sp) },
+        leadingIcon = { Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.primary) },
+        trailingIcon = {
+            if (query.isNotEmpty()) IconButton(onClick = { onQuery("") }) { Icon(Icons.Default.Close, "Clear search") }
+        },
+        singleLine = true,
+        shape = RoundedCornerShape(28.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
+            unfocusedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+            focusedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+        ),
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+@Composable
+fun QtyBadge(text: String) {
+    Box(
+        Modifier.clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .padding(horizontal = 18.dp, vertical = 12.dp)
+    ) {
+        Text(text, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
+    }
+}
+
+@Composable
+fun EmptyHint(text: String) {
+    Text(
+        text, textAlign = TextAlign.Center,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.fillMaxWidth().padding(32.dp)
+    )
+}
+
+@Composable
+fun CalculateTab(
+    products: List<Product>,
+    noProducts: Boolean,
+    query: String,
+    onQuery: (String) -> Unit,
+    onTap: (Product) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item { SearchField(query, onQuery) }
         if (products.isEmpty()) {
             item {
-                Text(
-                    if (totalCount == 0) "No products yet.\nTap “Add product” or import a CSV from the ⋮ menu."
-                    else "No products match your search.",
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.fillMaxWidth().padding(32.dp)
+                EmptyHint(
+                    if (noProducts) "No products yet.\nTap + to add one, or import a CSV from the ⋮ menu."
+                    else "No products match your search."
                 )
             }
         }
         items(products, key = { it.id }) { p ->
-            ProductCard(p, onQty = { onQty(p, it) }, onEdit = { onEdit(p) }, onTapQty = { onTapQty(p) })
-        }
-    }
-}
-
-@Composable
-fun ProductCard(p: Product, onQty: (Int) -> Unit, onEdit: () -> Unit, onTapQty: () -> Unit) {
-    ElevatedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(p.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "${money(Calc.unitPrice(p))} per ${Calc.unitLabel(p)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, "Edit ${p.name}") }
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                FilledTonalIconButton(onClick = { if (p.quantity > 0) onQty(p.quantity - 1) }) {
-                    Text("−", fontSize = 22.sp)
-                }
-                TextButton(onClick = onTapQty) {
-                    Text("${p.quantity}", style = MaterialTheme.typography.titleLarge)
-                }
-                FilledTonalIconButton(onClick = { onQty(p.quantity + 1) }) {
-                    Icon(Icons.Default.Add, "Increase")
-                }
-                Spacer(Modifier.weight(1f))
-                Text(
-                    money(Calc.lineTotal(p)),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun StockTab(items: List<Product>) {
-    val tablets = items.sumOf { Calc.tablets(it) }
-    val cc = items.sumOf { Calc.ccCount(it) }
-    val pot = items.sumOf { Calc.potCount(it) }
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+            ElevatedCard(
+                onClick = { onTap(p) },
+                shape = RoundedCornerShape(28.dp),
+                colors = cardColors(),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 3.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(Modifier.padding(20.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    Stat("Tablets", num(tablets))
-                    Stat("Total CC", num(cc))
-                    Stat("Total Pot", num(pot))
-                }
-            }
-        }
-        if (items.isEmpty()) {
-            item {
-                Text(
-                    "Select quantities on the Calculate tab to see CC / Pot totals here.",
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.fillMaxWidth().padding(32.dp)
-                )
-            }
-        }
-        items(items, key = { it.id }) { p ->
-            ElevatedCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Text(p.name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                        Text("Tablets: ${num(Calc.tablets(p))}")
-                        Text("CC: ${num(Calc.ccCount(p))}")
-                        Text("Pot: ${num(Calc.potCount(p))}")
+                Row(Modifier.padding(horizontal = 22.dp, vertical = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(p.name, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(4.dp))
+                        Text("Rate: ${money(p.rate)}", fontSize = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(4.dp))
+                        Text("Total: ${money(Calc.lineTotal(p))}", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                     }
+                    QtyBadge("Qty: ${Calc.qtyLabel(p)}")
                 }
             }
         }
@@ -344,10 +340,54 @@ fun StockTab(items: List<Product>) {
 }
 
 @Composable
-fun Stat(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-        Text(label, style = MaterialTheme.typography.labelMedium)
+fun StockTab(selected: List<Product>, query: String, onQuery: (String) -> Unit) {
+    val q = query.trim()
+    val items = selected.filter {
+        (Calc.ccCount(it) > 0 || Calc.potCount(it) > 0) && (q.isEmpty() || it.name.contains(q, ignoreCase = true))
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item { SearchField(query, onQuery) }
+        if (items.isEmpty()) item { EmptyHint("Set quantities on the Calculate tab (and “Tablets per CC” in each product) to see CC totals here.") }
+        items(items, key = { it.id }) { p ->
+            val cc = Calc.ccCount(p)
+            val pot = Calc.potCount(p)
+            ElevatedCard(
+                shape = RoundedCornerShape(28.dp),
+                colors = cardColors(),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 3.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(Modifier.padding(horizontal = 22.dp, vertical = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(p.name, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(4.dp))
+                        if (cc > 0) {
+                            Text("Tablets per CC: ${num(p.cc)}", fontSize = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.height(4.dp))
+                            Text("Total CC: ${String.format(java.util.Locale.US, "%.2f", cc)}", fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.tertiary)
+                        }
+                        if (pot > 0) {
+                            Spacer(Modifier.height(4.dp))
+                            Text("Tablets per Pot: ${num(p.pot)}", fontSize = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.height(4.dp))
+                            Text("Total Pot: ${String.format(java.util.Locale.US, "%.2f", pot)}", fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.tertiary)
+                        }
+                    }
+                    QtyBadge(
+                        listOfNotNull(
+                            if (cc > 0) "${num(cc)} CC" else null,
+                            if (pot > 0) "${num(pot)} Pot" else null
+                        ).joinToString(" · ")
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -357,33 +397,30 @@ fun HistoryTab(history: List<HistoryEntry>, onShare: (HistoryEntry) -> Unit, onD
     var expandedId by remember { mutableStateOf<Long?>(null) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        if (history.isEmpty()) {
-            item {
-                Text(
-                    "No saved invoices yet.\nCreate an invoice and tap Save.",
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.fillMaxWidth().padding(32.dp)
-                )
-            }
-        }
+        if (history.isEmpty()) item { EmptyHint("No saved calculations yet.\nTap History on the Calculate tab to save one.") }
         items(history, key = { it.id }) { h ->
-            ElevatedCard(Modifier.fillMaxWidth().clickable { expandedId = if (expandedId == h.id) null else h.id }) {
-                Column(Modifier.padding(16.dp)) {
+            ElevatedCard(
+                onClick = { expandedId = if (expandedId == h.id) null else h.id },
+                shape = RoundedCornerShape(28.dp),
+                colors = cardColors(),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 3.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(horizontal = 22.dp, vertical = 18.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(h.profileName, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium)
-                            Text(formatDate(h.createdAt), style = MaterialTheme.typography.bodySmall,
+                            Text(h.profileName, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                            Text("Saved " + formatDate(h.createdAt), style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Text(money(h.total), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text(money(h.total), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                     }
                     if (expandedId == h.id) {
                         Spacer(Modifier.height(10.dp))
-                        Text(h.body, style = MaterialTheme.typography.bodySmall)
+                        Text(h.body, style = MaterialTheme.typography.bodyMedium)
                         Row {
                             IconButton(onClick = { onShare(h) }) { Icon(Icons.Default.Share, "Share") }
                             IconButton(onClick = { toDelete = h }) { Icon(Icons.Default.Delete, "Delete") }
@@ -395,8 +432,8 @@ fun HistoryTab(history: List<HistoryEntry>, onShare: (HistoryEntry) -> Unit, onD
     }
     toDelete?.let { h ->
         ConfirmDialog(
-            title = "Delete invoice?",
-            text = "This saved invoice will be removed.",
+            title = "Delete entry?",
+            text = "This saved calculation will be removed.",
             onConfirm = { onDelete(h); toDelete = null },
             onDismiss = { toDelete = null }
         )
