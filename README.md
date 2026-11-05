@@ -1,4 +1,4 @@
-# Rate Calculator (modern rebuild)
+# Sample Count
 
 ## Get the APK (no PC needed)
 1. Upload everything in this folder to a GitHub repo (keep the `.github` folder).
@@ -10,3 +10,7 @@
 - - CC tab: type CC (or Pot) per product; quantity = CC x tablets-per-CC.
 - History tab: saved invoices as PNG files (also copied to Pictures/RateCalculator on Android 10+).
 - Products come from app/src/main/assets/rates.csv on first run.
+
+## Features added
+- Font size (menu > Font size), pencil = update title to current date & time, undo/redo next to search,
+  CC clear confirmation, Save as New / Overwrite Existing (latest invoice).
