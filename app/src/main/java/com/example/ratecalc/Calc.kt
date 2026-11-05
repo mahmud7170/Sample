@@ -15,16 +15,19 @@ object Calc {
 
     fun lineTotal(p: Product): Double = p.rate * p.quantity
 
-    fun ccCount(p: Product): Double = when {
-        p.soldUnit == "CC" -> p.quantity.toDouble()
-        p.cc > 0 -> p.quantity / p.cc
-        else -> 0.0
-    }
+    private fun per(v: Double) = if (v > 0) v else 1.0
 
-    fun potCount(p: Product): Double = when {
-        p.soldUnit == "Pot" -> p.quantity.toDouble()
-        p.pot > 0 -> p.quantity / p.pot
-        else -> 0.0
+    fun ccCount(p: Product): Double = if (p.soldUnit == "CC") p.quantity.toDouble() else p.quantity / per(p.cc)
+    fun potCount(p: Product): Double = if (p.soldUnit == "Pot") p.quantity.toDouble() else p.quantity / per(p.pot)
+
+    /** The CC tab edits CC (or Pot, for products sold as Pot). */
+    fun stockIsPot(p: Product) = p.soldUnit == "Pot"
+    fun stockValue(p: Product): Double = if (stockIsPot(p)) potCount(p) else ccCount(p)
+
+    /** Quantity that results from typing `v` CC (or Pot) on the CC tab. */
+    fun qtyFromStock(p: Product, v: Double): Int = when (p.soldUnit) {
+        "CC", "Pot" -> Math.round(v).toInt()
+        else -> Math.round(v * per(p.cc)).toInt()
     }
 
     /** "20", "25 CC", "3 Pot" */
@@ -55,13 +58,13 @@ fun formatDate(t: Long): String = SimpleDateFormat("dd MMM yyyy, hh:mm a", Local
 data class CsvRow(val name: String, val rate: Double, val cc: Double, val pot: Double, val unit: String, val qty: Int)
 
 object Csv {
-    const val HEADER = "name,rate,cc,pot,soldUnit,quantity"
+    const val HEADER = "Name,Rate,CC,Pot,SoldUnit"
 
     fun export(list: List<Product>): String {
         val sb = StringBuilder(HEADER).append('\n')
         list.forEach { p ->
             sb.append(esc(p.name)).append(',').append(p.rate).append(',').append(p.cc).append(',')
-                .append(p.pot).append(',').append(p.soldUnit).append(',').append(p.quantity).append('\n')
+                .append(p.pot).append(',').append(p.soldUnit).append('\n')
         }
         return sb.toString()
     }

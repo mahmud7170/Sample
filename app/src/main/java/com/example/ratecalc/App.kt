@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.example.ratecalc
 
 import android.content.Context
@@ -9,10 +11,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusManager
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -52,7 +59,8 @@ fun AppRoot(vm: MainViewModel) {
     val profiles by vm.profiles.collectAsState()
     val profile by vm.currentProfile.collectAsState()
     val products by vm.products.collectAsState()
-    val history by vm.history.collectAsState()
+    val invoices by vm.invoices.collectAsState()
+    val focus = LocalFocusManager.current
 
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -103,7 +111,11 @@ fun AppRoot(vm: MainViewModel) {
                     modifier = Modifier.weight(1f),
                     fontSize = 24.sp, lineHeight = 30.sp, fontWeight = FontWeight.Bold, maxLines = 2
                 )
-                IconButton(onClick = { renameTitle = true }) { Icon(Icons.Default.Edit, "Rename") }
+                if (tab == 1) {
+                    IconButton(onClick = { focus.clearFocus() }) { Icon(Icons.Default.Check, "Done") }
+                } else {
+                    IconButton(onClick = { renameTitle = true }) { Icon(Icons.Default.Edit, "Rename") }
+                }
                 IconButton(onClick = { showInvoice = true }) { Icon(Icons.Default.Share, "Invoice") }
                 Box {
                     IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, "Menu") }
@@ -125,7 +137,7 @@ fun AppRoot(vm: MainViewModel) {
                     showHistoryButton = tab == 0,
                     clearLabel = if (tab == 0) "Clear All" else "Clear",
                     canSave = selected.isNotEmpty(),
-                    onHistory = { vm.saveHistory(selected) },
+                    onHistory = { vm.saveInvoice(selected) },
                     onClear = { confirmClear = true }
                 )
                 NavigationBar {
@@ -153,8 +165,19 @@ fun AppRoot(vm: MainViewModel) {
         Box(Modifier.padding(inner).fillMaxSize()) {
             when (tab) {
                 0 -> CalculateTab(filtered, products.isEmpty(), query, { query = it }, onTap = { qtyFor = it })
-                1 -> StockTab(selected, query, { query = it })
-                else -> HistoryTab(history, onShare = { shareText(ctx, it.body) }, onDelete = { vm.deleteHistory(it) })
+                1 -> StockTab(
+                    products = products,
+                    query = query,
+                    onQuery = { query = it },
+                    onEdit = { editing = it },
+                    onValue = { p, v -> vm.setQty(p, Calc.qtyFromStock(p, v)) }
+                )
+                else -> HistoryTab(
+                    files = invoices,
+                    onShare = { InvoiceImage.shareFile(ctx, it) },
+                    onGallery = { vm.saveToGallery(it) },
+                    onDelete = { vm.deleteInvoice(it) }
+                )
             }
         }
     }
@@ -340,102 +363,85 @@ fun CalculateTab(
 }
 
 @Composable
-fun StockTab(selected: List<Product>, query: String, onQuery: (String) -> Unit) {
+fun StockTab(
+    products: List<Product>,
+    query: String,
+    onQuery: (String) -> Unit,
+    onEdit: (Product) -> Unit,
+    onValue: (Product, Double) -> Unit
+) {
     val q = query.trim()
-    val items = selected.filter {
-        (Calc.ccCount(it) > 0 || Calc.potCount(it) > 0) && (q.isEmpty() || it.name.contains(q, ignoreCase = true))
-    }
+    val items = if (q.isEmpty()) products else products.filter { it.name.contains(q, ignoreCase = true) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item { SearchField(query, onQuery) }
-        if (items.isEmpty()) item { EmptyHint("Set quantities on the Calculate tab (and “Tablets per CC” in each product) to see CC totals here.") }
+        if (items.isEmpty()) item { EmptyHint("No products found.") }
         items(items, key = { it.id }) { p ->
-            val cc = Calc.ccCount(p)
-            val pot = Calc.potCount(p)
-            ElevatedCard(
-                shape = RoundedCornerShape(28.dp),
-                colors = cardColors(),
-                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 3.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(Modifier.padding(horizontal = 22.dp, vertical = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(p.name, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(4.dp))
-                        if (cc > 0) {
-                            Text("Tablets per CC: ${num(p.cc)}", fontSize = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.height(4.dp))
-                            Text("Total CC: ${String.format(java.util.Locale.US, "%.2f", cc)}", fontSize = 22.sp,
-                                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.tertiary)
-                        }
-                        if (pot > 0) {
-                            Spacer(Modifier.height(4.dp))
-                            Text("Tablets per Pot: ${num(p.pot)}", fontSize = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.height(4.dp))
-                            Text("Total Pot: ${String.format(java.util.Locale.US, "%.2f", pot)}", fontSize = 22.sp,
-                                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.tertiary)
-                        }
-                    }
-                    QtyBadge(
-                        listOfNotNull(
-                            if (cc > 0) "${num(cc)} CC" else null,
-                            if (pot > 0) "${num(pot)} Pot" else null
-                        ).joinToString(" · ")
-                    )
-                }
-            }
+            StockCard(p, onEdit = { onEdit(p) }, onValue = { onValue(p, it) })
         }
     }
 }
 
 @Composable
-fun HistoryTab(history: List<HistoryEntry>, onShare: (HistoryEntry) -> Unit, onDelete: (HistoryEntry) -> Unit) {
-    var toDelete by remember { mutableStateOf<HistoryEntry?>(null) }
-    var expandedId by remember { mutableStateOf<Long?>(null) }
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+fun StockCard(p: Product, onEdit: () -> Unit, onValue: (Double) -> Unit) {
+    val isPot = Calc.stockIsPot(p)
+    val label = if (isPot) "Pot" else "CC"
+    val value = Calc.stockValue(p)
+    val initial = if (value > 0) num(value) else ""
+    var text by remember(p.id) { mutableStateOf(initial) }
+    // Keep the field in sync when quantity changes elsewhere (Calculate tab, Clear, edit),
+    // but never overwrite what the user is typing.
+    LaunchedEffect(p.quantity, p.cc, p.pot, p.soldUnit) {
+        val typedQty = text.toDoubleOrNull()?.let { Calc.qtyFromStock(p, it) } ?: 0
+        if (typedQty != p.quantity) text = initial
+    }
+    ElevatedCard(
+        shape = RoundedCornerShape(28.dp),
+        colors = cardColors(),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 3.dp),
+        modifier = Modifier.fillMaxWidth()
     ) {
-        if (history.isEmpty()) item { EmptyHint("No saved calculations yet.\nTap History on the Calculate tab to save one.") }
-        items(history, key = { it.id }) { h ->
-            ElevatedCard(
-                onClick = { expandedId = if (expandedId == h.id) null else h.id },
-                shape = RoundedCornerShape(28.dp),
-                colors = cardColors(),
-                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 3.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(Modifier.padding(horizontal = 22.dp, vertical = 18.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(h.profileName, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                            Text("Saved " + formatDate(h.createdAt), style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Text(money(h.total), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    }
-                    if (expandedId == h.id) {
-                        Spacer(Modifier.height(10.dp))
-                        Text(h.body, style = MaterialTheme.typography.bodyMedium)
-                        Row {
-                            IconButton(onClick = { onShare(h) }) { Icon(Icons.Default.Share, "Share") }
-                            IconButton(onClick = { toDelete = h }) { Icon(Icons.Default.Delete, "Delete") }
-                        }
+        Row(Modifier.padding(horizontal = 22.dp, vertical = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(p.name, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f, fill = false))
+                    IconButton(onClick = onEdit) {
+                        Icon(Icons.Default.Edit, "Edit ${p.name}", tint = MaterialTheme.colorScheme.primary)
                     }
                 }
+                Text(
+                    "Tablets per $label: ${num(if (isPot) p.pot else p.cc)}",
+                    fontSize = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Total $label: ${String.format(java.util.Locale.US, "%.2f", value)}",
+                    fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.tertiary
+                )
             }
+            Spacer(Modifier.width(8.dp))
+            OutlinedTextField(
+                value = text,
+                onValueChange = { s ->
+                    val clean = s.filter { c -> c.isDigit() || c == '.' }.take(8)
+                    text = clean
+                    onValue(clean.toDoubleOrNull() ?: 0.0)
+                },
+                label = { Text(label) },
+                singleLine = true,
+                shape = RoundedCornerShape(24.dp),
+                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 22.sp),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                trailingIcon = {
+                    if (text.isNotEmpty()) {
+                        IconButton(onClick = { text = ""; onValue(0.0) }) { Icon(Icons.Default.Close, "Clear") }
+                    }
+                },
+                modifier = Modifier.width(150.dp)
+            )
         }
-    }
-    toDelete?.let { h ->
-        ConfirmDialog(
-            title = "Delete entry?",
-            text = "This saved calculation will be removed.",
-            onConfirm = { onDelete(h); toDelete = null },
-            onDismiss = { toDelete = null }
-        )
     }
 }

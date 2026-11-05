@@ -1,7 +1,13 @@
 package com.example.ratecalc
 
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.provider.MediaStore
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -66,6 +72,41 @@ object InvoiceImage {
         p.textAlign = Paint.Align.RIGHT
         c.drawText("Grand Total: " + money(items.sumOf { Calc.lineTotal(it) }), xTot, y + 40f, p)
         return bmp
+    }
+
+    /** Folder that holds the saved history PNGs. */
+    fun dir(ctx: Context): File = File(ctx.filesDir, "invoices").apply { mkdirs() }
+
+    /** Renders the invoice, saves it as Invoice_yyyyMMdd_HHmmss.png in the history folder (and the gallery). */
+    fun savePng(ctx: Context, items: List<Product>): File {
+        val name = "Invoice_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) + ".png"
+        val f = File(dir(ctx), name)
+        FileOutputStream(f).use { render(items).compress(Bitmap.CompressFormat.PNG, 100, it) }
+        try { copyToGallery(ctx, f) } catch (e: Exception) { /* history copy is what matters */ }
+        return f
+    }
+
+    /** Copies a PNG into Pictures/RateCalculator (Android 10+; no permission needed). */
+    fun copyToGallery(ctx: Context, f: File): Boolean {
+        if (Build.VERSION.SDK_INT < 29) return false
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, f.name)
+            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/RateCalculator")
+        }
+        val uri = ctx.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return false
+        ctx.contentResolver.openOutputStream(uri)?.use { out -> f.inputStream().use { it.copyTo(out) } } ?: return false
+        return true
+    }
+
+    fun shareFile(ctx: Context, f: File) {
+        val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", f)
+        val i = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        ctx.startActivity(Intent.createChooser(i, "Share invoice"))
     }
 
     fun share(ctx: Context, items: List<Product>) {

@@ -34,15 +34,6 @@ data class Product(
     val quantity: Int = 0
 )
 
-@Entity(tableName = "history")
-data class HistoryEntry(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val profileName: String,
-    val createdAt: Long,
-    val total: Double,
-    val body: String
-)
-
 @Dao
 interface ProfileDao {
     @Query("SELECT * FROM profiles ORDER BY lastAccessed DESC")
@@ -94,23 +85,10 @@ interface ProductDao {
     suspend fun all(pid: Long): List<Product>
 }
 
-@Dao
-interface HistoryDao {
-    @Query("SELECT * FROM history ORDER BY createdAt DESC")
-    fun observeAll(): Flow<List<HistoryEntry>>
-
-    @Insert
-    suspend fun insert(h: HistoryEntry): Long
-
-    @Query("DELETE FROM history WHERE id = :id")
-    suspend fun delete(id: Long)
-}
-
-@Database(entities = [Profile::class, Product::class, HistoryEntry::class], version = 1, exportSchema = false)
+@Database(entities = [Profile::class, Product::class], version = 1, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun profileDao(): ProfileDao
     abstract fun productDao(): ProductDao
-    abstract fun historyDao(): HistoryDao
 
     companion object {
         @Volatile private var instance: AppDatabase? = null

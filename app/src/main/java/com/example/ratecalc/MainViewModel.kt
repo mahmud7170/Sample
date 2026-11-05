@@ -9,13 +9,13 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val db = AppDatabase.get(app)
     private val profileDao = db.profileDao()
     private val productDao = db.productDao()
-    private val historyDao = db.historyDao()
 
     private val currentId = MutableStateFlow<Long?>(null)
 
@@ -25,19 +25,34 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val products = currentId.flatMapLatest { id ->
         if (id == null) flowOf(emptyList()) else productDao.observe(id)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-    val history = historyDao.observeAll().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    private val _invoices = MutableStateFlow<List<File>>(emptyList())
+    val invoices = _invoices.asStateFlow()
 
     private val _events = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val events = _events.asSharedFlow()
 
     init {
         viewModelScope.launch {
-            if (profileDao.count() == 0) profileDao.insert(Profile(name = formatDate(System.currentTimeMillis())))
+            if (profileDao.count() == 0) createDefaultProfile()
             currentId.value = profileDao.latest()?.id
+            refreshInvoices()
         }
     }
 
     private fun say(msg: String) { _events.tryEmit(msg) }
+
+    /** First run: new profile filled with the bundled rates.csv product list. */
+    private suspend fun createDefaultProfile(): Long {
+        val id = profileDao.insert(Profile(name = formatDate(System.currentTimeMillis())))
+        try {
+            val text = getApplication<Application>().assets.open("rates.csv").bufferedReader().use { it.readText() }
+            Csv.parse(text).forEach { r ->
+                productDao.insert(Product(profileId = id, name = r.name, rate = r.rate, cc = r.cc, pot = r.pot, soldUnit = r.unit))
+            }
+        } catch (e: Exception) { /* no bundled list: start empty */ }
+        return id
+    }
 
     // ---- products ----
     fun addProduct(name: String, rate: Double, cc: Double, pot: Double, unit: String) {
@@ -58,7 +73,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun deleteProduct(p: Product) { viewModelScope.launch { productDao.delete(p) } }
 
-    // FIX: quantity can never go negative or overflow.
     fun setQty(p: Product, q: Int) { viewModelScope.launch { productDao.setQty(p.id, q.coerceIn(0, 999_999)) } }
 
     fun clearQuantities() {
@@ -74,9 +88,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** New profile = fresh calculation with the same product list, quantities at 0. */
     fun createProfile(name: String) {
         viewModelScope.launch {
+            val source = currentId.value?.let { productDao.all(it) }.orEmpty()
             val id = profileDao.insert(Profile(name = name.ifBlank { formatDate(System.currentTimeMillis()) }))
+            source.forEach { productDao.insert(it.copy(id = 0, profileId = id, quantity = 0)) }
             currentId.value = id
         }
     }
@@ -87,30 +104,47 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             profileDao.delete(id) // products cascade
             if (currentId.value == id) {
-                if (profileDao.count() == 0) currentId.value = profileDao.insert(Profile(name = formatDate(System.currentTimeMillis())))
-                else currentId.value = profileDao.latest()?.id
+                currentId.value = if (profileDao.count() == 0) createDefaultProfile() else profileDao.latest()?.id
             }
         }
     }
 
-    // ---- history ----
-    fun saveHistory(items: List<Product>) {
-        val name = currentProfile.value?.name ?: "Profile"
-        viewModelScope.launch {
-            val now = System.currentTimeMillis()
-            historyDao.insert(
-                HistoryEntry(
-                    profileName = name,
-                    createdAt = now,
-                    total = items.sumOf { Calc.lineTotal(it) },
-                    body = Calc.invoiceText(items)
-                )
-            )
-            say("Saved to history")
+    // ---- history = saved PNG invoices ----
+    private suspend fun refreshInvoices() {
+        _invoices.value = withContext(Dispatchers.IO) {
+            InvoiceImage.dir(getApplication()).listFiles()
+                ?.filter { it.extension.equals("png", ignoreCase = true) }
+                ?.sortedByDescending { it.lastModified() }
+                ?: emptyList()
         }
     }
 
-    fun deleteHistory(h: HistoryEntry) { viewModelScope.launch { historyDao.delete(h.id) } }
+    fun saveInvoice(items: List<Product>) {
+        if (items.isEmpty()) { say("Nothing to save"); return }
+        viewModelScope.launch {
+            try {
+                val f = withContext(Dispatchers.IO) { InvoiceImage.savePng(getApplication(), items) }
+                refreshInvoices()
+                say("Saved ${f.name}")
+            } catch (e: Exception) {
+                say("Save failed: ${e.message}")
+            }
+        }
+    }
+
+    fun deleteInvoice(f: File) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { f.delete() }
+            refreshInvoices()
+        }
+    }
+
+    fun saveToGallery(f: File) {
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) { InvoiceImage.copyToGallery(getApplication(), f) }
+            say(if (ok) "Saved to Pictures/RateCalculator" else "Could not save to gallery")
+        }
+    }
 
     // ---- CSV ----
     fun exportTo(uri: Uri) {
@@ -145,7 +179,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     if (existing == null) {
                         productDao.insert(Product(profileId = pid, name = r.name, rate = r.rate, cc = r.cc, pot = r.pot, soldUnit = r.unit, quantity = r.qty))
                     } else {
-                        productDao.update(existing.copy(rate = r.rate, cc = r.cc, pot = r.pot, soldUnit = r.unit, quantity = r.qty))
+                        productDao.update(existing.copy(rate = r.rate, cc = r.cc, pot = r.pot, soldUnit = r.unit, quantity = if (r.qty > 0) r.qty else existing.quantity))
                     }
                 }
                 say("Imported ${rows.size} products")
