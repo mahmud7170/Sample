@@ -1,9 +1,16 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
+    <!-- white invoice sheet -->
     <path android:fillColor="#FFFFFF"
-        android:pathData="M34,28h40a6,6 0 0 1 6,6v40a6,6 0 0 1 -6,6H34a6,6 0 0 1 -6,-6V34a6,6 0 0 1 6,-6z" />
-    <path android:fillColor="#006A60" android:pathData="M38,34h32v12H38z" />
-    <path android:fillColor="#006A60"
-        android:pathData="M38,52h8v8h-8z M50,52h8v8h-8z M62,52h8v8h-8z M38,64h8v8h-8z M50,64h8v8h-8z M62,64h8v8h-8z" />
+        android:pathData="M37,26h34a6,6 0 0 1 6,6v44a6,6 0 0 1 -6,6H37a6,6 0 0 1 -6,-6V32a6,6 0 0 1 6,-6z" />
+    <!-- text lines -->
+    <path android:fillColor="#B9CCFF"
+        android:pathData="M39,36h30a2,2 0 0 1 0,4H39a2,2 0 0 1 0,-4z M39,46h22a2,2 0 0 1 0,4H39a2,2 0 0 1 0,-4z M39,56h14a2,2 0 0 1 0,4H39a2,2 0 0 1 0,-4z" />
+    <!-- cyan badge with check -->
+    <path android:fillColor="#19C4E8"
+        android:pathData="M68,60m-15,0a15,15 0 1 1 30,0a15,15 0 1 1 -30,0" />
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="4"
+        android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M61,60l5,5l9,-10" />
 </vector>
