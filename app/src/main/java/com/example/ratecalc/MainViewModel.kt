@@ -29,6 +29,41 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _invoices = MutableStateFlow<List<File>>(emptyList())
     val invoices = _invoices.asStateFlow()
 
+    // ---- undo / redo of quantity changes ----
+    private val undoStack = ArrayDeque<Map<Long, Int>>()
+    private val redoStack = ArrayDeque<Map<Long, Int>>()
+    private val _canUndo = MutableStateFlow(false)
+    private val _canRedo = MutableStateFlow(false)
+    val canUndo = _canUndo.asStateFlow()
+    val canRedo = _canRedo.asStateFlow()
+    private var lastEditId: Long? = null
+    private var lastEditAt = 0L
+
+    private fun snapshot(): Map<Long, Int> = products.value.associate { it.id to it.quantity }
+    private fun flags() { _canUndo.value = undoStack.isNotEmpty(); _canRedo.value = redoStack.isNotEmpty() }
+    private fun pushUndo() {
+        undoStack.addLast(snapshot())
+        if (undoStack.size > 50) undoStack.removeFirst()
+        redoStack.clear()
+        flags()
+    }
+    private fun resetUndo() { undoStack.clear(); redoStack.clear(); lastEditId = null; flags() }
+    private fun applySnapshot(m: Map<Long, Int>) {
+        viewModelScope.launch { m.forEach { (id, q) -> productDao.setQty(id, q) } }
+    }
+
+    fun undo() {
+        val prev = undoStack.removeLastOrNull() ?: return
+        redoStack.addLast(snapshot()); lastEditId = null; flags()
+        applySnapshot(prev)
+    }
+
+    fun redo() {
+        val next = redoStack.removeLastOrNull() ?: return
+        undoStack.addLast(snapshot()); lastEditId = null; flags()
+        applySnapshot(next)
+    }
+
     private val _events = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val events = _events.asSharedFlow()
 
@@ -73,15 +108,37 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun deleteProduct(p: Product) { viewModelScope.launch { productDao.delete(p) } }
 
-    fun setQty(p: Product, q: Int) { viewModelScope.launch { productDao.setQty(p.id, q.coerceIn(0, 999_999)) } }
+    fun setQty(p: Product, q: Int) {
+        val newQ = q.coerceIn(0, 999_999)
+        if (newQ == p.quantity) return
+        val now = System.currentTimeMillis()
+        // Typing several digits into one product counts as ONE undo step.
+        if (lastEditId != p.id || now - lastEditAt > 2000) pushUndo()
+        lastEditId = p.id
+        lastEditAt = now
+        viewModelScope.launch { productDao.setQty(p.id, newQ) }
+    }
 
     fun clearQuantities() {
         val pid = currentId.value ?: return
+        pushUndo()
+        lastEditId = null
         viewModelScope.launch { productDao.clearQty(pid) }
     }
 
     // ---- profiles ----
+    /** One tap: set the current profile's title to the current date & time. */
+    fun updateTitleToNow() {
+        val id = currentId.value ?: return
+        val title = formatDate(System.currentTimeMillis())
+        viewModelScope.launch {
+            profileDao.rename(id, title)
+            say("Updated to $title")
+        }
+    }
+
     fun switchProfile(id: Long) {
+        resetUndo()
         viewModelScope.launch {
             profileDao.touch(id, System.currentTimeMillis())
             currentId.value = id
@@ -90,6 +147,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** New profile = fresh calculation with the same product list, quantities at 0. */
     fun createProfile(name: String) {
+        resetUndo()
         viewModelScope.launch {
             val source = currentId.value?.let { productDao.all(it) }.orEmpty()
             val id = profileDao.insert(Profile(name = name.ifBlank { formatDate(System.currentTimeMillis()) }))
@@ -104,6 +162,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             profileDao.delete(id) // products cascade
             if (currentId.value == id) {
+                resetUndo()
                 currentId.value = if (profileDao.count() == 0) createDefaultProfile() else profileDao.latest()?.id
             }
         }
@@ -119,13 +178,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun saveInvoice(items: List<Product>) {
+    fun saveInvoice(items: List<Product>, overwrite: Boolean) {
         if (items.isEmpty()) { say("Nothing to save"); return }
+        val willOverwrite = overwrite && _invoices.value.isNotEmpty()
         viewModelScope.launch {
             try {
-                val f = withContext(Dispatchers.IO) { InvoiceImage.savePng(getApplication(), items) }
+                val f = withContext(Dispatchers.IO) { InvoiceImage.savePng(getApplication(), items, willOverwrite) }
                 refreshInvoices()
-                say("Saved ${f.name}")
+                say(if (willOverwrite) "Overwrote ${f.name}" else "Saved ${f.name}")
             } catch (e: Exception) {
                 say("Save failed: ${e.message}")
             }

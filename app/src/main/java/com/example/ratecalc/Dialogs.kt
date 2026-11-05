@@ -1,5 +1,6 @@
 package com.example.ratecalc
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -158,7 +159,6 @@ fun ProfilesDialog(
     onDelete: (Long) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var newName by remember { mutableStateOf("") }
     var renaming by remember { mutableStateOf<Profile?>(null) }
     var renameText by remember { mutableStateOf("") }
     var deleting by remember { mutableStateOf<Profile?>(null) }
@@ -183,17 +183,17 @@ fun ProfilesDialog(
                         }
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = newName, onValueChange = { newName = it },
-                    label = { Text("New profile name (optional)") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                Text(
+                    "A new profile is named with the current date & time and keeps your product list.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp)
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = { onCreate(newName.trim()); newName = ""; onDismiss() }) {
-                Text("Create")
+            TextButton(onClick = { onCreate(""); onDismiss() }) {
+                Text("New profile")
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } }
@@ -224,4 +224,38 @@ fun ProfilesDialog(
             onDismiss = { deleting = null }
         )
     }
+}
+
+@Composable
+fun SaveHistoryDialog(onNew: () -> Unit, onOverwrite: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Save History") },
+        text = { Text("How would you like to save this history?\n\n“Overwrite Existing” replaces the latest saved invoice.") },
+        confirmButton = { TextButton(onClick = onNew) { Text("Save as New") } },
+        dismissButton = { TextButton(onClick = onOverwrite) { Text("Overwrite Existing") } }
+    )
+}
+
+@Composable
+fun FontSizeDialog(current: Float, onSelect: (Float) -> Unit, onDismiss: () -> Unit) {
+    val options = listOf("Small" to 0.85f, "Medium" to 1.0f, "Large" to 1.15f, "Extra large" to 1.3f)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Font size") },
+        text = {
+            Column {
+                options.forEach { (label, scale) ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { onSelect(scale) },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = kotlin.math.abs(current - scale) < 0.01f, onClick = { onSelect(scale) })
+                        Text(label)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } }
+    )
 }

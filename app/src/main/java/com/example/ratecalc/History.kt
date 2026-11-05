@@ -86,7 +86,7 @@ fun HistoryTab(
 
 @Composable
 private fun InvoiceCard(f: File, onOpen: () -> Unit, onShare: () -> Unit, onGallery: () -> Unit, onDelete: () -> Unit) {
-    val bmp by produceState<ImageBitmap?>(initialValue = null, f.path) { value = decode(f, 2) }
+    val bmp by produceState<ImageBitmap?>(initialValue = null, f.path, f.lastModified()) { value = decode(f, 2) }
     var menu by remember { mutableStateOf(false) }
     ElevatedCard(
         shape = RoundedCornerShape(28.dp),
@@ -127,7 +127,7 @@ private fun InvoiceCard(f: File, onOpen: () -> Unit, onShare: () -> Unit, onGall
 
 @Composable
 private fun InvoiceViewer(f: File, onShare: () -> Unit, onClose: () -> Unit) {
-    val bmp by produceState<ImageBitmap?>(initialValue = null, f.path) { value = decode(f, 1) }
+    val bmp by produceState<ImageBitmap?>(initialValue = null, f.path, f.lastModified()) { value = decode(f, 1) }
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             Column(Modifier.fillMaxSize()) {

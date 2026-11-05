@@ -78,11 +78,20 @@ object InvoiceImage {
     fun dir(ctx: Context): File = File(ctx.filesDir, "invoices").apply { mkdirs() }
 
     /** Renders the invoice, saves it as Invoice_yyyyMMdd_HHmmss.png in the history folder (and the gallery). */
-    fun savePng(ctx: Context, items: List<Product>): File {
-        val name = "Invoice_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) + ".png"
-        val f = File(dir(ctx), name)
+    fun savePng(ctx: Context, items: List<Product>, overwriteLatest: Boolean = false): File {
+        val latest = if (overwriteLatest) {
+            dir(ctx).listFiles()?.filter { it.extension.equals("png", true) }?.maxByOrNull { it.lastModified() }
+        } else null
+        val f = latest ?: File(
+            dir(ctx),
+            "Invoice_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) + ".png"
+        )
         FileOutputStream(f).use { render(items).compress(Bitmap.CompressFormat.PNG, 100, it) }
-        try { copyToGallery(ctx, f) } catch (e: Exception) { /* history copy is what matters */ }
+        f.setLastModified(System.currentTimeMillis())
+        // Overwrite keeps the same file; only new invoices get a fresh gallery copy.
+        if (latest == null) {
+            try { copyToGallery(ctx, f) } catch (e: Exception) { /* history copy is what matters */ }
+        }
         return f
     }
 
