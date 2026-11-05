@@ -3,7 +3,7 @@
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
-        android:label="Rate Calculator"
+        android:label="Sample Count"
         android:supportsRtl="true"
         android:theme="@style/Theme.RateCalc">
         <activity
