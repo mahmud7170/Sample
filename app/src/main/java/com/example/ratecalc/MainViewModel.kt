@@ -194,15 +194,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun deleteInvoice(f: File) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { f.delete() }
+            withContext(Dispatchers.IO) { InvoiceImage.deleteInvoice(f) }
             refreshInvoices()
+        }
+    }
+
+    fun updateInvoiceDate(f: File) {
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) { InvoiceImage.updateDate(f, System.currentTimeMillis()) }
+            refreshInvoices()
+            say(if (ok) "Invoice date updated" else "This invoice has no saved data, date can't be changed")
         }
     }
 
     fun saveToGallery(f: File) {
         viewModelScope.launch {
             val ok = withContext(Dispatchers.IO) { InvoiceImage.copyToGallery(getApplication(), f) }
-            say(if (ok) "Saved to Pictures/RateCalculator" else "Could not save to gallery")
+            say(if (ok) "Saved to Pictures/SampleCount" else "Could not save to gallery")
         }
     }
 
@@ -217,7 +225,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         it.write(csv.toByteArray(Charsets.UTF_8))
                     } ?: error("Cannot open file")
                 }
-                say("Exported successfully")
+                say("Rates exported")
             } catch (e: Exception) {
                 say("Export failed: ${e.message}")
             }
@@ -237,12 +245,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 rows.forEach { r ->
                     val existing = productDao.findByName(pid, r.name)
                     if (existing == null) {
-                        productDao.insert(Product(profileId = pid, name = r.name, rate = r.rate, cc = r.cc, pot = r.pot, soldUnit = r.unit, quantity = r.qty))
+                        productDao.insert(Product(profileId = pid, name = r.name, rate = r.rate, cc = r.cc, pot = r.pot, soldUnit = r.unit))
                     } else {
-                        productDao.update(existing.copy(rate = r.rate, cc = r.cc, pot = r.pot, soldUnit = r.unit, quantity = if (r.qty > 0) r.qty else existing.quantity))
+                        productDao.update(existing.copy(rate = r.rate, cc = r.cc, pot = r.pot, soldUnit = r.unit))
                     }
                 }
-                say("Imported ${rows.size} products")
+                say("Imported rates for ${rows.size} products")
             } catch (e: Exception) {
                 say("Import failed: ${e.message}")
             }

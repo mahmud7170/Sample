@@ -20,6 +20,7 @@ import androidx.compose.ui.window.DialogProperties
 
 @Composable
 fun InvoiceScreen(items: List<Product>, onShare: () -> Unit, onClose: () -> Unit) {
+    val now = androidx.compose.runtime.remember { System.currentTimeMillis() }
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             Column(Modifier.fillMaxSize()) {
@@ -42,6 +43,10 @@ fun InvoiceScreen(items: List<Product>, onShare: () -> Unit, onClose: () -> Unit
                         Text(
                             "INVOICE", color = Color.Black, fontSize = 44.sp, fontWeight = FontWeight.Medium,
                             textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            formatDate(now), color = Color.DarkGray, fontSize = 15.sp,
+                            textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
                         )
                         Spacer(Modifier.height(24.dp))
                         InvoiceRow("Item", "Rate", "Qty", "Total", Color.DarkGray, FontWeight.Normal)

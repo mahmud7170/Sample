@@ -259,3 +259,27 @@ fun FontSizeDialog(current: Float, onSelect: (Float) -> Unit, onDismiss: () -> U
         confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } }
     )
 }
+
+@Composable
+fun RatesDialog(onExport: () -> Unit, onImport: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Export / Import rates") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "Rates are saved as a CSV file: Name, Rate, CC, Pot, SoldUnit.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Button(onClick = onExport, modifier = Modifier.fillMaxWidth()) { Text("Export rates") }
+                OutlinedButton(onClick = onImport, modifier = Modifier.fillMaxWidth()) { Text("Import rates") }
+                Text(
+                    "Import adds new products and updates the rates of products with the same name. Quantities are not changed.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } }
+    )
+}

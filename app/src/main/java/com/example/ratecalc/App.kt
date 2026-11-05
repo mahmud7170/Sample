@@ -63,7 +63,9 @@ fun AppRoot(vm: MainViewModel, fontScale: Float, onFontScale: (Float) -> Unit) {
     val focus = LocalFocusManager.current
     val canUndo by vm.canUndo.collectAsState()
     val canRedo by vm.canRedo.collectAsState()
-    val undoUi = UndoUi(canUndo, canRedo, { vm.undo() }, { vm.redo() })
+    var confirmUR by remember { mutableStateOf<String?>(null) }
+    var showRates by remember { mutableStateOf(false) }
+    val undoUi = UndoUi(canUndo, canRedo, { confirmUR = "undo" }, { confirmUR = "redo" })
 
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -129,11 +131,7 @@ fun AppRoot(vm: MainViewModel, fontScale: Float, onFontScale: (Float) -> Unit) {
                         DropdownMenuItem(text = { Text("Profiles") }, onClick = { showMenu = false; showProfiles = true })
                         DropdownMenuItem(text = { Text("Rename profile") }, onClick = { showMenu = false; renameTitle = true })
                         DropdownMenuItem(text = { Text("Font size") }, onClick = { showMenu = false; showFont = true })
-                        DropdownMenuItem(text = { Text("Import CSV") }, onClick = { showMenu = false; importLauncher.launch(arrayOf("*/*")) })
-                        DropdownMenuItem(text = { Text("Export CSV") }, onClick = {
-                            showMenu = false
-                            exportLauncher.launch("products.csv")
-                        })
+                        DropdownMenuItem(text = { Text("Export / Import rates") }, onClick = { showMenu = false; showRates = true })
                     }
                 }
             }
@@ -186,7 +184,8 @@ fun AppRoot(vm: MainViewModel, fontScale: Float, onFontScale: (Float) -> Unit) {
                     files = invoices,
                     onShare = { InvoiceImage.shareFile(ctx, it) },
                     onGallery = { vm.saveToGallery(it) },
-                    onDelete = { vm.deleteInvoice(it) }
+                    onDelete = { vm.deleteInvoice(it) },
+                    onUpdateDate = { vm.updateInvoiceDate(it) }
                 )
             }
         }
@@ -259,6 +258,23 @@ fun AppRoot(vm: MainViewModel, fontScale: Float, onFontScale: (Float) -> Unit) {
     }
     if (showFont) {
         FontSizeDialog(current = fontScale, onSelect = onFontScale, onDismiss = { showFont = false })
+    }
+    confirmUR?.let { which ->
+        val undoing = which == "undo"
+        ConfirmDialog(
+            title = if (undoing) "Undo last change?" else "Redo change?",
+            text = if (undoing) "The last quantity change will be reverted." else "The change you undid will be applied again.",
+            confirmLabel = if (undoing) "Undo" else "Redo",
+            onConfirm = { if (undoing) vm.undo() else vm.redo(); confirmUR = null },
+            onDismiss = { confirmUR = null }
+        )
+    }
+    if (showRates) {
+        RatesDialog(
+            onExport = { showRates = false; exportLauncher.launch("rates.csv") },
+            onImport = { showRates = false; importLauncher.launch(arrayOf("*/*")) },
+            onDismiss = { showRates = false }
+        )
     }
     clearCcFor?.let { p ->
         val what = if (Calc.stockIsPot(p)) "Pot" else "CC"
@@ -382,7 +398,7 @@ fun CalculateTab(
         if (products.isEmpty()) {
             item {
                 EmptyHint(
-                    if (noProducts) "No products yet.\nTap + to add one, or import a CSV from the ⋮ menu."
+                    if (noProducts) "No products yet.\nTap + to add one, or import rates from the ⋮ menu."
                     else "No products match your search."
                 )
             }

@@ -42,10 +42,12 @@ fun HistoryTab(
     files: List<File>,
     onShare: (File) -> Unit,
     onGallery: (File) -> Unit,
-    onDelete: (File) -> Unit
+    onDelete: (File) -> Unit,
+    onUpdateDate: (File) -> Unit
 ) {
-    var viewing by remember { mutableStateOf<File?>(null) }
+    var viewingPath by remember { mutableStateOf<String?>(null) }
     var toDelete by remember { mutableStateOf<File?>(null) }
+    var toUpdate by remember { mutableStateOf<File?>(null) }
 
     if (files.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -62,17 +64,37 @@ fun HistoryTab(
             items(files, key = { it.path }) { f ->
                 InvoiceCard(
                     f,
-                    onOpen = { viewing = f },
+                    onOpen = { viewingPath = f.path },
                     onShare = { onShare(f) },
                     onGallery = { onGallery(f) },
-                    onDelete = { toDelete = f }
+                    onDelete = { toDelete = f },
+                    onUpdateDate = { toUpdate = f }
                 )
             }
         }
     }
 
-    viewing?.let { f ->
-        InvoiceViewer(f, onShare = { onShare(f) }, onClose = { viewing = null })
+    viewingPath?.let { path ->
+        val f = files.firstOrNull { it.path == path }
+        if (f == null) {
+            viewingPath = null
+        } else {
+            InvoiceViewer(
+                f,
+                onShare = { onShare(f) },
+                onUpdateDate = { toUpdate = f },
+                onClose = { viewingPath = null }
+            )
+        }
+    }
+    toUpdate?.let { f ->
+        ConfirmDialog(
+            title = "Update date?",
+            text = "Change the date on ${f.name} to the current date and time (${formatDate(System.currentTimeMillis())})?",
+            confirmLabel = "Update",
+            onConfirm = { onUpdateDate(f); toUpdate = null },
+            onDismiss = { toUpdate = null }
+        )
     }
     toDelete?.let { f ->
         ConfirmDialog(
@@ -85,7 +107,14 @@ fun HistoryTab(
 }
 
 @Composable
-private fun InvoiceCard(f: File, onOpen: () -> Unit, onShare: () -> Unit, onGallery: () -> Unit, onDelete: () -> Unit) {
+private fun InvoiceCard(
+    f: File,
+    onOpen: () -> Unit,
+    onShare: () -> Unit,
+    onGallery: () -> Unit,
+    onDelete: () -> Unit,
+    onUpdateDate: () -> Unit
+) {
     val bmp by produceState<ImageBitmap?>(initialValue = null, f.path, f.lastModified()) { value = decode(f, 2) }
     var menu by remember { mutableStateOf(false) }
     ElevatedCard(
@@ -121,12 +150,13 @@ private fun InvoiceCard(f: File, onOpen: () -> Unit, onShare: () -> Unit, onGall
                     }
                 }
             }
+            FilledTonalButton(onClick = onUpdateDate, modifier = Modifier.fillMaxWidth()) { Text("Update date") }
         }
     }
 }
 
 @Composable
-private fun InvoiceViewer(f: File, onShare: () -> Unit, onClose: () -> Unit) {
+private fun InvoiceViewer(f: File, onShare: () -> Unit, onUpdateDate: () -> Unit, onClose: () -> Unit) {
     val bmp by produceState<ImageBitmap?>(initialValue = null, f.path, f.lastModified()) { value = decode(f, 1) }
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -143,7 +173,11 @@ private fun InvoiceViewer(f: File, onShare: () -> Unit, onClose: () -> Unit) {
                         )
                     }
                 }
-                Spacer(Modifier.height(32.dp))
+                Button(
+                    onClick = onUpdateDate,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)
+                ) { Text("Update date") }
+                Spacer(Modifier.height(16.dp))
             }
         }
     }
